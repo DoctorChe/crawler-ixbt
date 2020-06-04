@@ -4,7 +4,7 @@ import requests
 
 from bs4 import BeautifulSoup
 
-from db import DB, DbCsv
+from db import DB, DbCsv, DbElastic
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger('ixbt')
@@ -31,6 +31,9 @@ class Crawler:
         self.url = 'https://www.ixbt.com/news/'
         self.base_url = 'https://www.ixbt.com'
         self._db = db
+        self.id1 = None
+        self.id2 = None
+        self.author = None
 
     @property
     def db(self) -> DB:
@@ -71,7 +74,7 @@ class Crawler:
 
     def parse_item(self, item: BeautifulSoup):
         url = self.get_url(item)
-        title = self.get_url(item)
+        title = self.get_title(item)
         news = self.get_news(url)
         description = news.get('description')
         author = news.get('author')
@@ -85,6 +88,14 @@ class Crawler:
             author=author,
             id=hash(description),
         ))
+
+        if not self.author:
+            self.author = author
+        if not self.id1:
+            self.id1 = hash(description)
+            return
+        if not self.id2 and author == self.author:
+            self.id2 = hash(description)
 
         logger.debug(f'{title}\n{description}\n{url}\n{pub_date}\n{author}')
         logger.debug('=' * 80)
@@ -154,6 +165,13 @@ class Crawler:
 
 
 if __name__ == '__main__':
-    db = DbCsv()
+    # db = DbCsv()
+    db = DbElastic()
     crawler = Crawler(db)
     crawler.run()
+    news = crawler.db.get_news(crawler.id1)
+    logger.info(f'Новость из БД с id={crawler.id1}:\n{news}')
+    s = crawler.db.search('author', crawler.author)
+    for hit in s['hits']:
+        logger.info('%(author)s | %(title)s | %(url)s | %(pub_date)s' % hit['_source'])
+    logger.info(crawler.db.aggregate('author'))
