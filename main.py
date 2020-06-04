@@ -4,7 +4,8 @@ import requests
 
 from bs4 import BeautifulSoup
 
-from db import DB, DbCsv, DbElastic
+from analyzer import Analyzer
+from db import DB, DbElastic
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger('ixbt')
@@ -165,7 +166,6 @@ class Crawler:
 
 
 if __name__ == '__main__':
-    # db = DbCsv()
     db = DbElastic()
     crawler = Crawler(db)
     crawler.run()
@@ -175,3 +175,7 @@ if __name__ == '__main__':
     for hit in s['hits']:
         logger.info('%(author)s | %(title)s | %(url)s | %(pub_date)s' % hit['_source'])
     logger.info(crawler.db.aggregate('author'))
+    analyzer = Analyzer()
+    words1 = crawler.db.get_words(crawler.id1)
+    words2 = crawler.db.get_words(crawler.id2)
+    logger.info(f'Shingles+MinHash: {analyzer.shingles_min_hash(words1, words2)}')
