@@ -1,7 +1,9 @@
 import collections
+import csv
 import logging
 import requests
 
+from abc import ABC, abstractmethod
 from bs4 import BeautifulSoup
 
 logging.basicConfig(level=logging.INFO)
@@ -19,16 +21,60 @@ ParseResult = collections.namedtuple(
     )
 )
 
+HEADERS = (
+    'id',
+    'title',
+    'description',
+    'pub_date',
+    'author',
+    'url',
+)
+
+
+class DB(ABC):
+    @abstractmethod
+    def add_news(self, data: ParseResult):
+        pass
+
+    @abstractmethod
+    def get_news(self, id_):
+        pass
+
+    @abstractmethod
+    def get_all_news(self):
+        pass
+
+    @abstractmethod
+    def get_words(self, id_):
+        pass
+
+    @abstractmethod
+    def search(self, field, value):
+        pass
+
+    @property
+    @abstractmethod
+    def count(self):
+        pass
+
 
 class Crawler:
-    def __init__(self):
+    def __init__(self, db: DB) -> None:
         self.session = requests.Session()
         self.session.headers = {
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36 OPR/68.0.3618.125',
             'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7,en-GB;q=0.6'}
         self.url = 'https://www.ixbt.com/news/'
         self.base_url = 'https://www.ixbt.com'
-        self.result = []
+        self._db = db
+
+    @property
+    def db(self) -> DB:
+        return self._db
+
+    @db.setter
+    def db(self, db: DB) -> None:
+        self._db = db
 
     def get_html(self, url):
         try:
@@ -67,7 +113,7 @@ class Crawler:
         author = news.get('author')
         pub_date = news.get('pub_date')
 
-        self.add_news(ParseResult(
+        self.db.add_news(ParseResult(
             title=title,
             description=description,
             url=url,
@@ -138,20 +184,49 @@ class Crawler:
             logger.error('No pub_date')
         return pub_date
 
-    def add_news(self, news: ParseResult):
-        self.result.append(news)
-
-    def count_news(self):
-        return len(self.result)
-
     def run(self):
         if html := self.get_html(self.url):
             self.parse_html(html=html)
-            logger.info(f'Получено новостей: {self.count_news()}')
+            logger.info(f'Получено новостей: {self.db.count}')
         else:
             logger.error(f'Запрашиваемая страница не получена: {self.url}')
 
 
+class DbCsv(DB):
+    def __init__(self):
+        self.file_name = 'db.csv'
+        self.create_db()
+
+    def create_db(self):
+        with open(self.file_name, 'w', encoding='utf-8') as f:
+            writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
+            writer.writerow(HEADERS)
+
+    def add_news(self, data: ParseResult):
+        with open(self.file_name, 'a', encoding='utf-8') as f:
+            writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
+            writer.writerow(data)
+
+    def get_news(self, id_):
+        pass
+
+    def get_all_news(self):
+        pass
+
+    def get_words(self, id_):
+        pass
+
+    def search(self, field, value):
+        pass
+
+    @property
+    def count(self):
+        with open(self.file_name, 'r', encoding='utf-8') as f:
+            file_object = csv.reader(f)
+            return sum(1 for _ in file_object) - 1
+
+
 if __name__ == '__main__':
-    crawler = Crawler()
+    db = DbCsv()
+    crawler = Crawler(db)
     crawler.run()
