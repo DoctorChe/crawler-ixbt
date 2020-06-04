@@ -4,7 +4,9 @@ import requests
 
 from bs4 import BeautifulSoup
 
-logging.basicConfig(level=logging.INFO)
+from db import DB, DbCsv
+
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger('ixbt')
 
 ParseResult = collections.namedtuple(
@@ -21,14 +23,22 @@ ParseResult = collections.namedtuple(
 
 
 class Crawler:
-    def __init__(self):
+    def __init__(self, db: DB) -> None:
         self.session = requests.Session()
         self.session.headers = {
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.138 Safari/537.36 OPR/68.0.3618.125',
             'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7,en-GB;q=0.6'}
         self.url = 'https://www.ixbt.com/news/'
         self.base_url = 'https://www.ixbt.com'
-        self.result = []
+        self._db = db
+
+    @property
+    def db(self) -> DB:
+        return self._db
+
+    @db.setter
+    def db(self, db: DB) -> None:
+        self._db = db
 
     def get_html(self, url):
         try:
@@ -67,7 +77,7 @@ class Crawler:
         author = news.get('author')
         pub_date = news.get('pub_date')
 
-        self.add_news(ParseResult(
+        self.db.add_news(ParseResult(
             title=title,
             description=description,
             url=url,
@@ -84,7 +94,6 @@ class Crawler:
         if not url_item:
             logger.error('No url_item')
             return
-
         url = f"{self.base_url}{url_item.get('href')}"
         if not url:
             logger.error('No href')
@@ -107,13 +116,11 @@ class Crawler:
 
     def parse_html_news(self, html: str):
         soup = BeautifulSoup(html, 'lxml')
-
         result = {
             'description': self.get_description(soup),
             'author': self.get_author(soup),
             'pub_date': self.get_pub_date(soup),
         }
-
         return result
 
     @staticmethod
@@ -138,20 +145,15 @@ class Crawler:
             logger.error('No pub_date')
         return pub_date
 
-    def add_news(self, news: ParseResult):
-        self.result.append(news)
-
-    def count_news(self):
-        return len(self.result)
-
     def run(self):
         if html := self.get_html(self.url):
             self.parse_html(html=html)
-            logger.info(f'Получено новостей: {self.count_news()}')
+            logger.info(f'Получено новостей: {self.db.count}')
         else:
             logger.error(f'Запрашиваемая страница не получена: {self.url}')
 
 
 if __name__ == '__main__':
-    crawler = Crawler()
+    db = DbCsv()
+    crawler = Crawler(db)
     crawler.run()
